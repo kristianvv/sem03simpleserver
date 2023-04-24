@@ -16,7 +16,7 @@ import (
 func main() {
 	var wg sync.WaitGroup
 
-	server, err := net.Listen("tcp", "172.17.0.2:8082")
+	server, err := net.Listen("tcp", "172.17.0.2:8300")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func main() {
 
 					switch msgString {
 					case "ping":
-						kryptertMelding := Krypter([]rune("pong"), ALF_SEM03, -4)
+						kryptertMelding := Krypter([]rune("pong"), ALF_SEM03, 4)
 						log.Println("Kryptert melding: ", string(kryptertMelding))
 						_, err = c.Write([]byte(string(kryptertMelding)))
 
@@ -70,10 +70,10 @@ func main() {
 								log.Fatal(err)
 							}
 
-							kryptertMelding := Krypter([]rune(newString), ALF_SEM03, len(ALF_SEM03)-4)
+							kryptertMelding := Krypter([]rune(newString), ALF_SEM03, 4)
 							_, err = conn.Write([]byte(string(kryptertMelding)))
 						} else {
-							kryptertMelding := Krypter([]rune(string(buf[:n])), ALF_SEM03, len(ALF_SEM03)-4)
+							kryptertMelding := Krypter([]rune(string(buf[:n])), ALF_SEM03, 4)
 							_, err = c.Write([]byte(string(kryptertMelding)))
 
 						}
