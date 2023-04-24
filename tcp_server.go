@@ -1,14 +1,15 @@
 package main
 
 import (
-        "io"
-        "log"
-        "net"
-        "sync"
-        "strings"
-	"strconv"
-	"fmt"
 	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"strconv"
+	"strings"
+	"sync"
+
 	"github.com/kristianvv/funtemps/conv"
 )
 
@@ -117,7 +118,6 @@ func CelsiusToFarenheitString(celsius string) (string, error) {
 	fahrString := fmt.Sprintf("%.1f", fahrFloat)
 	return fahrString, err
 }
-
 
 var ALF_SEM03 []rune = []rune("abcdefghijklmnopqrstuvwxyzæøå0123456789.,:; KSN") //ABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅ
 
