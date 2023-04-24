@@ -5,10 +5,13 @@ import (
 	"log"
 	"net"
 	"sync"
+
+	"github.com/kristianvv/is105sem03/mycrypt"
+        "github.com/kristianvv/funtemps/conv"
+	"github.com/kristianvv/minyr/yr"
 )
 
 func main() {
-
 	var wg sync.WaitGroup
 
 	server, err := net.Listen("tcp", "172.17.0.2:8080")
@@ -16,6 +19,7 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("bundet til %s", server.Addr().String())
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -36,11 +40,19 @@ func main() {
 						}
 						return // fra for løkke
 					}
-					switch msg := string(buf[:n]); msg {
-  				        case "ping":
-						_, err = c.Write([]byte("pong"))
+					decrypted := mycrypt.Decrypt(buf[:n])
+					switch msg := string(decrypted); msg {
+					case "ping":
+						encrypted := mycrypt.Encrypt([]byte("pong"))
+						_, err = c.Write(encrypted)
+					case string(mycrypt.Decrypt([]byte("Kjevik"))):
+						temperature := yr.GetTemperature()
+						converted := conv.ConvertTemperature(temperature, "C", "F")
+						encrypted := mycrypt.Encrypt([]byte(converted))
+						_, err = c.Write(encrypted)
 					default:
-						_, err = c.Write(buf[:n])
+						encrypted := mycrypt.Encrypt(decrypted)
+						_, err = c.Write(encrypted)
 					}
 					if err != nil {
 						if err != io.EOF {
@@ -52,5 +64,6 @@ func main() {
 			}(conn)
 		}
 	}()
+
 	wg.Wait()
 }
