@@ -1,13 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"sync"
 
 	"github.com/kristianvv/is105sem03/mycrypt"
-        "github.com/kristianvv/funtemps/conv"
 	"github.com/kristianvv/minyr/yr"
 )
 
@@ -24,42 +24,59 @@ func main() {
 	go func() {
 		defer wg.Done()
 		for {
-			log.Println("før server.Accept() kallet")
 			conn, err := server.Accept()
 			if err != nil {
-				return
+				log.Fatal(err)
 			}
-			go func(c net.Conn) {
-				defer c.Close()
+			log.Printf("mottatt tilkobling fra %s", conn.RemoteAddr().String())
+
+			wg.Add(1)
+			go func(conn net.Conn) {
+				defer wg.Done()
+				defer conn.Close()
+
+				buf := make([]byte, 1024)
 				for {
-					buf := make([]byte, 1024)
-					n, err := c.Read(buf)
+					n, err := conn.Read(buf)
 					if err != nil {
 						if err != io.EOF {
-							log.Println(err)
+							log.Printf("feil ved mottak: %v", err)
 						}
-						return // fra for løkke
+						break
 					}
-					decrypted := mycrypt.Decrypt(buf[:n])
-					switch msg := string(decrypted); msg {
-					case "ping":
-						encrypted := mycrypt.Encrypt([]byte("pong"))
-						_, err = c.Write(encrypted)
-					case string(mycrypt.Decrypt([]byte("Kjevik"))):
-						temperature := yr.GetTemperature()
-						converted := conv.ConvertTemperature(temperature, "C", "F")
-						encrypted := mycrypt.Encrypt([]byte(converted))
-						_, err = c.Write(encrypted)
+
+					command := string(buf[:n])
+					log.Printf("mottatt kommando '%s'", command)
+
+					var response string
+
+					switch command {
+					case "conv":
+						yr.ConvTemperature()
+						response = "Temperature conversion complete"
+					case "avg":
+						avgTemp := yr.AverageTemp()
+						response = fmt.Sprintf("Average temperature for the period is: %.2f°C\n", avgTemp)
+					case "crypt":
+						response = "Enter message to encrypt:"
+						conn.Write([]byte(response))
+
+						n, err := conn.Read(buf)
+						if err != nil {
+							log.Printf("feil ved mottak: %v", err)
+							break
+						}
+
+						message := string(buf[:n])
+						log.Printf("mottatt melding '%s'", message)
+
+						encryptedMessage := string(mycrypt.Krypter([]rune(message), mycrypt.ALF_SEM03, 5))
+						response = fmt.Sprintf("Encrypted message: %s", encryptedMessage)
 					default:
-						encrypted := mycrypt.Encrypt(decrypted)
-						_, err = c.Write(encrypted)
+						response = "Invalid command"
 					}
-					if err != nil {
-						if err != io.EOF {
-							log.Println(err)
-						}
-						return // fra for løkke
-					}
+
+					conn.Write([]byte(response))
 				}
 			}(conn)
 		}
