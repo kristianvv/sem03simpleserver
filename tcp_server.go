@@ -1,86 +1,145 @@
 package main
 
 import (
+        "io"
+        "log"
+        "net"
+        "sync"
+        "strings"
+	"strconv"
 	"fmt"
-	"io"
-	"log"
-	"net"
-	"sync"
-
-	"github.com/kristianvv/is105sem03/mycrypt"
-	"github.com/kristianvv/minyr/yr"
+	"errors"
+	"github.com/kristianvv/funtemps/conv"
 )
 
 func main() {
 	var wg sync.WaitGroup
 
-	server, err := net.Listen("tcp", "172.17.0.2:8080")
+	server, err := net.Listen("tcp", "172.17.0.2:8300")
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer server.Close()
+
 	log.Printf("bundet til %s", server.Addr().String())
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+
 		for {
+			log.Println("før server.Accept() kallet")
+
 			conn, err := server.Accept()
 			if err != nil {
-				log.Fatal(err)
+				log.Println(err)
+				continue
 			}
-			log.Printf("mottatt tilkobling fra %s", conn.RemoteAddr().String())
 
 			wg.Add(1)
-			go func(conn net.Conn) {
+			go func(c net.Conn) {
 				defer wg.Done()
 				defer conn.Close()
 
-				buf := make([]byte, 1024)
 				for {
-					n, err := conn.Read(buf)
+					buf := make([]byte, 2048)
+					n, err := c.Read(buf)
 					if err != nil {
 						if err != io.EOF {
-							log.Printf("feil ved mottak: %v", err)
+							log.Println(err)
 						}
-						break
+						return
 					}
 
-					command := string(buf[:n])
-					log.Printf("mottatt kommando '%s'", command)
+					dekryptertMelding := Krypter([]rune(string(buf[:n])), ALF_SEM03, len(ALF_SEM03)-4)
+					log.Println("Dekrypter melding: ", string(dekryptertMelding))
 
-					var response string
+					msgString := string(dekryptertMelding)
 
-					switch command {
-					case "conv":
-						yr.ConvTemperature()
-						response = "Temperature conversion complete"
-					case "avg":
-						avgTemp := yr.AverageTemp()
-						response = fmt.Sprintf("Average temperature for the period is: %.2f°C\n", avgTemp)
-					case "crypt":
-						response = "Enter message to encrypt:"
-						conn.Write([]byte(response))
+					switch msgString {
+					case "ping":
+						kryptertMelding := Krypter([]rune("pong"), ALF_SEM03, -4)
+						log.Println("Kryptert melding: ", string(kryptertMelding))
+						_, err = c.Write([]byte(string(kryptertMelding)))
 
-						n, err := conn.Read(buf)
-						if err != nil {
-							log.Printf("feil ved mottak: %v", err)
-							break
-						}
-
-						message := string(buf[:n])
-						log.Printf("mottatt melding '%s'", message)
-
-						encryptedMessage := string(mycrypt.Krypter([]rune(message), mycrypt.ALF_SEM03, 5))
-						response = fmt.Sprintf("Encrypted message: %s", encryptedMessage)
 					default:
-						response = "Invalid command"
+						if strings.HasPrefix(msgString, "Kjevik") {
+							newString, err := CelsiusToFarenheitLine("Kjevik;SN39040;18.03.2022 01:50;6")
+							if err != nil {
+								log.Fatal(err)
+							}
+
+							kryptertMelding := Krypter([]rune(newString), ALF_SEM03, len(ALF_SEM03)-4)
+							_, err = conn.Write([]byte(string(kryptertMelding)))
+						} else {
+							kryptertMelding := Krypter([]rune(string(buf[:n])), ALF_SEM03, len(ALF_SEM03)-4)
+							_, err = c.Write([]byte(string(kryptertMelding)))
+
+						}
 					}
 
-					conn.Write([]byte(response))
+					if err != nil {
+						if err != io.EOF {
+							log.Println(err)
+						}
+						return
+					}
 				}
 			}(conn)
 		}
 	}()
 
 	wg.Wait()
+}
+
+func CelsiusToFarenheitLine(line string) (string, error) {
+
+	dividedString := strings.Split(line, ";")
+	var err error
+
+	if len(dividedString) == 4 {
+		dividedString[3], err = CelsiusToFarenheitString(dividedString[3])
+		if err != nil {
+			return "", err
+		}
+	} else {
+		return "", errors.New("linje har ikke forventet format")
+	}
+	return strings.Join(dividedString, ";"), nil
+}
+
+func CelsiusToFarenheitString(celsius string) (string, error) {
+	var fahrFloat float64
+	var err error
+	if celsiusFloat, err := strconv.ParseFloat(celsius, 64); err == nil {
+		fahrFloat = conv.CelsiusToFahrenheit(celsiusFloat)
+	}
+	fahrString := fmt.Sprintf("%.1f", fahrFloat)
+	return fahrString, err
+}
+
+
+var ALF_SEM03 []rune = []rune("abcdefghijklmnopqrstuvwxyzæøå0123456789.,:; KSN") //ABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅ
+
+func Krypter(melding []rune, alphabet []rune, chiffer int) []rune {
+	kryptertMelding := make([]rune, len(melding))
+	for i := 0; i < len(melding); i++ {
+		indeks := sokIAlfabetet(melding[i], alphabet)
+		if indeks+chiffer >= len(alphabet) {
+			kryptertMelding[i] = alphabet[indeks+chiffer-len(alphabet)]
+		} else {
+			kryptertMelding[i] = alphabet[indeks+chiffer]
+		}
+
+	}
+	return kryptertMelding
+}
+
+func sokIAlfabetet(symbol rune, alfabet []rune) int {
+	for i := 0; i < len(alfabet); i++ {
+		if symbol == alfabet[i] {
+			return i
+		}
+	}
+	return -1
 }
